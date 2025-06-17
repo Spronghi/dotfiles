@@ -13,6 +13,7 @@ Keep the ball rolling
 - [silicon](https://github.com/Aloxaf/silicon)
 - [ripgrep](https://github.com/BurntSushi/ripgrep)
 - [aerospace](https://github.com/nikitabobko/AeroSpace)
+- [atuin](https://atuin.sh/)
 
 ## Create symlinks
 
