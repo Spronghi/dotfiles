@@ -118,7 +118,7 @@ return {
     ins_right {
       -- Lsp server name .
       function()
-        local clients = vim.lsp.buf_get_clients()
+        local clients = vim.lsp.get_clients()
         if next(clients) == nil then
           return ""
         end

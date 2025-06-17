@@ -129,3 +129,6 @@ fi
 
 [[ $- =~ i ]] && bindkey -r '\ec'
 
+. "$HOME/.atuin/bin/env"
+
+eval "$(atuin init zsh)"
