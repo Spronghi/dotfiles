@@ -5,3 +5,8 @@ add_newline = false
 truncate_to_repo = false
 truncation_length = 10
 
+[custom.git_user]
+description = "Shows the current git user name"
+command = "git config user.email"
+when = "git rev-parse --is-inside-work-tree 2>/dev/null"
+format = "as [$output](bold cyan) "
