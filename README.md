@@ -34,3 +34,11 @@ mklink /d <windows_home>.config\wezterm <windows_home>\dotfiles\wezterm
 # for files
 mklink $WINDOWS_HOME\.wslconfig $WINDOWS_HOME\dotfiles\.wslconfig
 ```
+
+## Setup Commands
+
+On mac, is better to disable the special character info box
+
+```sh
+defaults write -g ApplePressAndHoldEnabled -bool false
+```
