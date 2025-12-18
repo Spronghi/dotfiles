@@ -3,12 +3,6 @@ local configs = require("configs")
 local wezterm = require("wezterm")
 
 return function(config)
-  if configs.custom_font then
-    config.font = wezterm.font {
-      family = "Cascadia Mono NF",
-    }
-  end
-
   -- show session name on the right of the tab
   wezterm.on("update-status", function(window, _)
     window:set_left_status(window:active_workspace() .. " | ")

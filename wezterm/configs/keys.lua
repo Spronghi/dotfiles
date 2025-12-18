@@ -27,6 +27,17 @@ return function(config)
       action = act.SplitVertical { domain = "CurrentPaneDomain" }
     },
 
+    -- split pane vertically but small
+    {
+      key = "a",
+      mods = "LEADER",
+      action = wezterm.action.SplitPane {
+        direction = 'Right',
+        command = { domain = 'CurrentPaneDomain' },
+        size = { Percent = 20 },
+      },
+    },
+
     --------------- MANAGE PANES ---------------
 
     -- zoom current pane

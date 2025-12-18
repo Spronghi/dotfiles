@@ -10,7 +10,7 @@ return {
     "marilari88/neotest-vitest",
     "nvim-neotest/neotest-jest",
   },
-  lazy = true,
+  lazy = false,
   config = function()
     require("neotest").setup({
       discovery = {
@@ -20,7 +20,7 @@ return {
         require("neotest-go"),
         require("neotest-vitest"),
         require("neotest-jest")({
-          jestCommand = "npm run test:unit --",
+          jestCommand = "npm test --",
           env = { CI = true },
           cwd = function(path)
             return vim.fn.getcwd()

@@ -9,4 +9,14 @@ truncation_length = 10
 description = "Shows the current git user name"
 command = "git config user.email"
 when = "git rev-parse --is-inside-work-tree 2>/dev/null"
-format = "as [$output](bold cyan) "
+format = '[$output](bold cyan) '
+style = "bold cyan"
+
+[aws]
+format = '[\[aws ($profile)($region)\] ]($style)'
+
+[aws.region_aliases]
+eu-central-1 = 'euc-1'
+
+[aws.profile_aliases]
+CompanyGroupFrobozzOnCallAccess = 'Frobozz'

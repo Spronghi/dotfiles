@@ -1,5 +1,6 @@
 local function default_opts(additiona_opts)
   local opts = {
+    layout_strategy = 'vertical',
     hidden = true,
     file_ignore_patterns = {
       ".git/", "^node_modules/"
@@ -22,7 +23,7 @@ return {
       defaults = {
         file_sorter = require("telescope.sorters").get_fzy_sorter,
         path_display = { "filename_first" },
-        layout_strategy = "horizontal",
+        -- layout_strategy = "horizontal",
         pickers = {
           git_files = default_opts(),
           live_grep = default_opts(),
