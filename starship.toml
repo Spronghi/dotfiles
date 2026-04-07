@@ -13,7 +13,7 @@ format = '[$output](bold cyan) '
 style = "bold cyan"
 
 [aws]
-format = '[\[aws ($profile)($region)\] ]($style)'
+format = '[\[aws ($profile )($region)\] ]($style)'
 
 [aws.region_aliases]
 eu-central-1 = 'euc-1'

@@ -4,6 +4,25 @@ local sessionizer = require("sessionizer")
 
 local act = wezterm.action
 
+-- Track the previous workspace for toggle functionality
+local previous_workspace = nil
+local current_workspace = nil
+
+wezterm.on("update-status", function(window, _)
+  local active = window:active_workspace()
+  if current_workspace == nil then
+    current_workspace = active
+  elseif current_workspace ~= active then
+    previous_workspace = current_workspace
+    current_workspace = active
+  end
+end)
+
+local function switch_to_last_workspace(window, pane)
+  local target = previous_workspace or current_workspace or window:active_workspace()
+  window:perform_action(act.SwitchToWorkspace { name = target }, pane)
+end
+
 return function(config)
   config.keys = {}
 
@@ -184,18 +203,18 @@ return function(config)
       },
     },
 
-    -- Navigate to the next workspace
-    {
-      key = "[",
-      mods = "CTRL",
-      action = act.SwitchWorkspaceRelative(1)
-    },
+    -- -- Navigate to the next workspace
+    -- {
+    --   key = "[",
+    --   mods = "CTRL",
+    --   action = act.SwitchWorkspaceRelative(1)
+    -- },
 
-    -- Navigate to the previous workspace
+    -- Toggle to the last active workspace
     {
       key = "]",
       mods = "CTRL",
-      action = act.SwitchWorkspaceRelative(-1)
+      action = wezterm.action_callback(switch_to_last_workspace)
     },
 
     -- Show CPU monitor

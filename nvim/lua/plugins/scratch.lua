@@ -4,8 +4,15 @@ return {
   init = function()
     require("which-key").add({
       mode = { "n" },
-      { "<leader>s",  group = "scratch" },
-      { "<leader>sf", "<cmd>ScratchOpen<cr>", desc = "Scratch find file" },
+      { "<leader>s", group = "scratch" },
+      {
+        "<leader>sf",
+        function()
+          require('telescope.builtin').find_files({ cwd = '~/.cache/nvim/scratch.nvim/', sorting_strategy = 'ascending', })
+        end,
+        desc = "Scratch find file"
+      },
+      -- { "<leader>sf",  "<cmd>ScratchOpen<cr>", desc = "Scratch find file" },
       {
         "<leader>ss",
         function()

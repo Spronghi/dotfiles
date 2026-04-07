@@ -112,6 +112,7 @@ alias c="clear"
 source ~/.nvm/nvm.sh
 
 export PATH=/opt/homebrew/bin:$PATH
+export PATH="$PATH:$HOME/go/bin"
 
 HISTFILE=~/.zsh_history
 HISTSIZE=10000
@@ -132,3 +133,4 @@ fi
 . "$HOME/.atuin/bin/env"
 
 eval "$(atuin init zsh)"
+
