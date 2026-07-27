@@ -1,97 +1,284 @@
+-- Sessionizer modeled after mikkasendke/sessionizer.wezterm:
+-- a schema of entries/generators is evaluated on show(), run through
+-- processing functions, then rendered with an InputSelector.
+--
+-- Schema shape:
+--   {
+--     options = { title, prompt, always_fuzzy, callback },
+--     processing = fn | { fn, ... },   -- each fn mutates the entries list
+--     <entries>,                       -- string | {label,id} | generator fn | nested schema
+--   }
+
 local wezterm = require("wezterm")
 local act = wezterm.action
 
-local M = {}
+local sessionizer = {}
 
-local fd = "/opt/homebrew/bin/fd"
-local rootPath = "/Users/simonecolaci/workspace"
+--------------- helpers ---------------
 
-M.toggle = function(window, pane)
-  local success, stdout, stderr = wezterm.run_child_process({
-    fd, "-HI", "-td", "^.git$", "--max-depth=4", rootPath,
-  })
+local function append_each(source, destination)
+  for _, value in ipairs(source) do
+    table.insert(destination, value)
+  end
+end
 
-  if not success then
-    wezterm.log_error("Failed to run fd: " .. stderr)
+local function merge_tables(t1, t2)
+  if not t2 then return end
+  for k, v in pairs(t2) do
+    if type(v) == "table" and type(t1[k]) == "table" then
+      merge_tables(t1[k], v)
+    else
+      t1[k] = v
+    end
+  end
+end
+
+sessionizer.for_each_entry = function(f)
+  return function(entries)
+    for _, entry in ipairs(entries) do
+      f(entry)
+    end
+  end
+end
+
+--------------- default callback ---------------
+
+local NEW_WORKSPACE_ID = "__new__"
+
+sessionizer.DefaultCallback = function(window, pane, id, _)
+  if not id then return end
+
+  if id == NEW_WORKSPACE_ID then
+    window:perform_action(
+      act.PromptInputLine({
+        description = "workspace name",
+        action = wezterm.action_callback(function(w, p, name)
+          if name and name ~= "" then
+            w:perform_action(
+              act.SwitchToWorkspace({ name = name, spawn = { cwd = wezterm.home_dir } }),
+              p
+            )
+          end
+        end),
+      }),
+      pane
+    )
     return
   end
 
-  local raw = {}
-  for line in stdout:gmatch("([^\n]*)\n?") do
-    if line ~= "" then
-      local path  = line:gsub("/.git/?$", "")
-      local name  = path:match("[^/]+$") or path
-      local rel   = path:gsub("^" .. rootPath .. "/", "")
-      local group = rel:match("^(.+)/[^/]+$") or ""
-      table.insert(raw, { path = path, name = name, group = group })
+  local name = id:match("[^/]+$") or id
+  window:perform_action(act.SwitchToWorkspace({ name = name, spawn = { cwd = id } }), pane)
+end
+
+--------------- schema processor ---------------
+
+local function complete_schema(schema)
+  if type(schema.processing) == "function" then schema.processing = { schema.processing } end
+
+  local defaults = {
+    options = {
+      title = "workspaces",
+      always_fuzzy = true,
+      callback = sessionizer.DefaultCallback,
+    },
+    processing = {},
+  }
+  merge_tables(defaults, schema)
+  return defaults
+end
+
+local function evaluate_schema(schema)
+  schema = complete_schema(schema)
+  local result = {}
+
+  for key, value in pairs(schema) do
+    if key ~= "processing" and key ~= "options" then
+      if type(value) == "string" then
+        table.insert(result, { label = value, id = value })
+      elseif type(value) == "table" then
+        if value.label and value.id then
+          table.insert(result, value)
+        else -- nested schema
+          append_each(evaluate_schema(value), result)
+        end
+      elseif type(value) == "function" then -- generator
+        append_each(evaluate_schema(value()), result)
+      end
     end
   end
 
-  table.sort(raw, function(a, b)
-    if a.group ~= b.group then return a.group < b.group end
-    return a.name < b.name
-  end)
-
-  local max_name = 0
-  for _, p in ipairs(raw) do
-    if #p.name > max_name then max_name = #p.name end
+  for _, processor in ipairs(schema.processing) do
+    processor(result)
   end
 
-  local choices = {
-    { label = "+ new workspace", id = "__new__" },
-  }
-
-  for _, p in ipairs(raw) do
-    local pad     = string.rep(" ", max_name - #p.name)
-    local right   = p.group ~= "" and ("  ·  " .. p.group) or ""
-    local display = p.name .. pad .. right
-
-    table.insert(choices, {
-      label = display,
-      id    = p.name .. "\t" .. p.path,
-    })
-  end
-
-  window:perform_action(
-    act.InputSelector({
-      action = wezterm.action_callback(function(win, inner_pane, id, _)
-        if not id then return end
-
-        if id == "__new__" then
-          win:perform_action(
-            act.PromptInputLine({
-              description = "workspace name",
-              action = wezterm.action_callback(function(w, p, name)
-                if name and name ~= "" then
-                  w:perform_action(
-                    act.SwitchToWorkspace({
-                      name = name,
-                      spawn = { cwd = wezterm.home_dir },
-                    }),
-                    p
-                  )
-                end
-              end),
-            }),
-            inner_pane
-          )
-          return
-        end
-
-        local name, path = id:match("^([^\t]+)\t(.+)$")
-        if name and path then
-          win:perform_action(
-            act.SwitchToWorkspace({ name = name, spawn = { cwd = path } }),
-            inner_pane
-          )
-        end
-      end),
-      fuzzy = true,
-      title = "workspaces",
-      choices = choices,
-    }),
-    pane
-  )
+  return result
 end
 
-return M
+--------------- generators ---------------
+
+-- Entry that prompts for a name and opens a fresh workspace in $HOME.
+sessionizer.NewWorkspace = function(opts)
+  local entry = { label = "+ new workspace", id = NEW_WORKSPACE_ID }
+  merge_tables(entry, opts)
+  return function()
+    return { entry }
+  end
+end
+
+-- Git repositories under a path, found with fd. Accepts a plain path
+-- string or { path, fd_path?, max_depth?, extra_args? }.
+sessionizer.FdSearch = function(opts)
+  if type(opts) == "string" then opts = { opts } end
+
+  return function()
+    local defaults = {
+      fd_path = "/opt/homebrew/bin/fd",
+      max_depth = 4,
+      extra_args = {},
+    }
+    merge_tables(defaults, opts)
+    opts = defaults
+
+    local command = {
+      opts.fd_path,
+      "-HI",
+      "-td",
+      "^.git$",
+      "--max-depth=" .. opts.max_depth,
+      "--format", "{//}",
+    }
+    append_each(opts.extra_args, command)
+    table.insert(command, opts[1])
+
+    local success, stdout, stderr = wezterm.run_child_process(command)
+    if not success then
+      wezterm.log_error("sessionizer: fd failed: " .. (stderr or ""))
+      return {}
+    end
+
+    local entries = {}
+    for line in stdout:gmatch("[^\n]+") do
+      table.insert(entries, { label = line, id = line })
+    end
+    return entries
+  end
+end
+
+--------------- processing ---------------
+
+-- Telescope-style labels ("filename_first"): "name   group" — name in
+-- normal text (foam when its workspace is already open), group column
+-- dimmed and aligned. Open workspaces sort first, then by group and
+-- name. Optional opts.icon is
+-- prefixed to each name. Non-path entries (e.g. NewWorkspace) stay at
+-- the top untouched.
+sessionizer.GroupedLabels = function(opts)
+  opts = opts or {}
+  local icon = opts.icon
+  local colors = {
+    icon = "#908caa",   -- rose-pine subtle
+    group = "#6e6a86",  -- rose-pine muted
+    active = "#9ccfd8", -- rose-pine foam
+  }
+  merge_tables(colors, opts.colors)
+
+  return function(entries)
+    local root = (opts.root or wezterm.home_dir):gsub("/$", "")
+
+    local active = {}
+    for _, name in ipairs(wezterm.mux.get_workspace_names()) do
+      active[name] = true
+    end
+
+    local head, repos = {}, {}
+    for _, entry in ipairs(entries) do
+      if entry.id:sub(1, 1) == "/" then
+        local name = entry.id:match("[^/]+$") or entry.id
+        local rel = entry.id:gsub("^" .. root .. "/", "")
+        local group = rel:match("^(.+)/[^/]+$") or ""
+        table.insert(repos, { entry = entry, name = name, group = group })
+      else
+        table.insert(head, entry)
+      end
+    end
+
+    table.sort(repos, function(a, b)
+      local a_active = active[a.name] or false
+      local b_active = active[b.name] or false
+      if a_active ~= b_active then return a_active end
+      if a.group ~= b.group then return a.group < b.group end
+      return a.name < b.name
+    end)
+
+    local max_name = 0
+    for _, r in ipairs(repos) do
+      if #r.name > max_name then max_name = #r.name end
+    end
+
+    for i = #entries, 1, -1 do entries[i] = nil end
+    append_each(head, entries)
+    for _, r in ipairs(repos) do
+      local segments = {}
+      if icon then
+        table.insert(segments, { Foreground = { Color = colors.icon } })
+        table.insert(segments, { Text = icon })
+      end
+      if active[r.name] then
+        table.insert(segments, { Foreground = { Color = colors.active } })
+      else
+        table.insert(segments, "ResetAttributes")
+      end
+      table.insert(segments, { Text = r.name })
+      if r.group ~= "" then
+        table.insert(segments, { Foreground = { Color = colors.group } })
+        table.insert(segments, { Text = string.rep(" ", max_name - #r.name) .. "  " .. r.group })
+      end
+      r.entry.label = wezterm.format(segments)
+      table.insert(entries, r.entry)
+    end
+  end
+end
+
+-- Colors entries whose workspace is already open. Run it after any
+-- processing that rewrites labels, or the color escapes get clobbered.
+sessionizer.HighlightActive = function(opts)
+  opts = opts or {}
+  local color = opts.color or "#9ccfd8" -- rose-pine foam
+  return function(entries)
+    local active = {}
+    for _, name in ipairs(wezterm.mux.get_workspace_names()) do
+      active[name] = true
+    end
+    for _, entry in ipairs(entries) do
+      local name = entry.id:match("[^/]+$") or entry.id
+      if active[name] then
+        entry.label = wezterm.format({
+          { Foreground = { Color = color } },
+          { Text = entry.label },
+        })
+      end
+    end
+  end
+end
+
+--------------- public api ---------------
+
+sessionizer.show = function(schema)
+  return wezterm.action_callback(function(window, pane)
+    local entries = evaluate_schema(schema)
+    local options = complete_schema(schema).options
+    window:perform_action(
+      act.InputSelector({
+        title = options.title,
+        description = options.prompt,
+        fuzzy_description = options.prompt,
+        fuzzy = options.always_fuzzy,
+        choices = entries,
+        action = wezterm.action_callback(options.callback),
+      }),
+      pane
+    )
+  end)
+end
+
+return sessionizer

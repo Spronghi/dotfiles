@@ -4,6 +4,8 @@ local sessionizer = require("sessionizer")
 
 local act = wezterm.action
 
+local workspace_root = wezterm.home_dir .. "/workspace"
+
 local function workspace_exists(name)
   for _, n in ipairs(wezterm.mux.get_workspace_names()) do
     if n == name then return true end
@@ -308,7 +310,16 @@ return function(config)
     },
 
     -- sessionizer
-    { key = "f", mods = "LEADER", action = wezterm.action_callback(sessionizer.toggle) },
+    {
+      key = "f",
+      mods = "LEADER",
+      action = sessionizer.show({
+        options = { title = "workspaces", prompt = "> " },
+        processing = sessionizer.GroupedLabels { root = workspace_root },
+        sessionizer.NewWorkspace {},
+        sessionizer.FdSearch(workspace_root),
+      }),
+    },
   }
 
   for i = 1, 8 do
