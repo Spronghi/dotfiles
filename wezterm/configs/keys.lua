@@ -4,23 +4,69 @@ local sessionizer = require("sessionizer")
 
 local act = wezterm.action
 
--- Track the previous workspace for toggle functionality
-local previous_workspace = nil
-local current_workspace = nil
+local function workspace_exists(name)
+  for _, n in ipairs(wezterm.mux.get_workspace_names()) do
+    if n == name then return true end
+  end
+  return false
+end
+
+-- Workspace MRU history for the CTRL+] toggle.
+--
+-- A simple current/previous pair breaks when a workspace dies (closing its
+-- last tab destroys it and wezterm silently switches away), so we keep a
+-- most-recent-first history instead and toggle to the first entry that is
+-- still alive. Stored in wezterm.GLOBAL because module locals are wiped on
+-- every config reload; kept as a delimited string because nested tables in
+-- wezterm.GLOBAL don't behave like plain Lua tables.
+local SEP = "\x1f"
+
+local function history_list()
+  local hist = {}
+  for name in (wezterm.GLOBAL.workspace_history or ""):gmatch("[^" .. SEP .. "]+") do
+    table.insert(hist, name)
+  end
+  return hist
+end
+
+local function history_save(hist)
+  wezterm.GLOBAL.workspace_history = table.concat(hist, SEP)
+end
 
 wezterm.on("update-status", function(window, _)
   local active = window:active_workspace()
-  if current_workspace == nil then
-    current_workspace = active
-  elseif current_workspace ~= active then
-    previous_workspace = current_workspace
-    current_workspace = active
+  local current = wezterm.GLOBAL.current_workspace
+  if current == active then return end
+  wezterm.GLOBAL.current_workspace = active
+  if current == nil then return end
+
+  -- Push the workspace we came from onto the history front. It may already
+  -- be dead (last tab closed); the toggle prunes dead entries when reading.
+  local hist = { current }
+  for _, name in ipairs(history_list()) do
+    if name ~= current and name ~= active and #hist < 10 then
+      table.insert(hist, name)
+    end
   end
+  history_save(hist)
 end)
 
 local function switch_to_last_workspace(window, pane)
-  local target = previous_workspace or current_workspace or window:active_workspace()
-  window:perform_action(act.SwitchToWorkspace { name = target }, pane)
+  local active = window:active_workspace()
+  local alive, target = {}, nil
+  for _, name in ipairs(history_list()) do
+    if workspace_exists(name) then
+      table.insert(alive, name)
+      if target == nil and name ~= active then target = name end
+    end
+  end
+  history_save(alive)
+
+  if target then
+    window:perform_action(act.SwitchToWorkspace { name = target }, pane)
+  else
+    wezterm.log_info("toggle: no other live workspace in history")
+  end
 end
 
 return function(config)
@@ -36,14 +82,33 @@ return function(config)
     {
       key = "v",
       mods = "LEADER",
-      action = act.SplitHorizontal { domain = "CurrentPaneDomain" }
+      action = wezterm.action.SplitPane {
+        direction = 'Right',
+        command = { domain = 'CurrentPaneDomain' },
+        size = { Percent = 50 },
+      },
     },
 
-    -- split pane vertically
+    -- split pane down
     {
       key = "s",
       mods = "LEADER",
-      action = act.SplitVertical { domain = "CurrentPaneDomain" }
+      action = wezterm.action.SplitPane {
+        direction = 'Down',
+        command = { domain = 'CurrentPaneDomain' },
+        size = { Percent = 50 },
+      },
+    },
+
+    -- split pane up
+    {
+      key = "S",
+      mods = "LEADER",
+      action = wezterm.action.SplitPane {
+        direction = 'Up',
+        command = { domain = 'CurrentPaneDomain' },
+        size = { Percent = 50 },
+      },
     },
 
     -- split pane vertically but small
@@ -92,6 +157,12 @@ return function(config)
     },
 
     -- close current pane
+    {
+      key = "w",
+      mods = "ALT",
+      action = act.CloseCurrentPane { confirm = true },
+    },
+
     {
       key = "w",
       mods = "LEADER",

@@ -112,6 +112,7 @@ alias c="clear"
 source ~/.nvm/nvm.sh
 
 export PATH=/opt/homebrew/bin:$PATH
+export PATH=/usr/local/bin:$PATH
 export PATH="$PATH:$HOME/go/bin"
 
 HISTFILE=~/.zsh_history
@@ -133,4 +134,17 @@ fi
 . "$HOME/.atuin/bin/env"
 
 eval "$(atuin init zsh)"
+
+
+# bun completions
+[ -s "/Users/simonecolaci/.bun/_bun" ] && source "/Users/simonecolaci/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+# AsyncAPI CLI Autocomplete
+
+ASYNCAPI_AC_ZSH_SETUP_PATH=/Users/simonecolaci/Library/Caches/@asyncapi/cli/autocomplete/zsh_setup && test -f $ASYNCAPI_AC_ZSH_SETUP_PATH && source $ASYNCAPI_AC_ZSH_SETUP_PATH; # asyncapi autocomplete setup
+
 
