@@ -165,14 +165,23 @@ sessionizer.FdSearch = function(opts)
 end
 
 -- Currently open workspaces. Skips the active one unless
--- opts.filter_current = false.
+-- opts.filter_current = false, in which case it is listed first and
+-- dimmed with a "(current)" marker.
 sessionizer.AllActiveWorkspaces = function(opts)
   opts = opts or {}
   return function()
     local current = wezterm.mux.get_active_workspace()
     local entries = {}
     for _, name in ipairs(wezterm.mux.get_workspace_names()) do
-      if opts.filter_current == false or name ~= current then
+      if name == current then
+        if opts.filter_current == false then
+          local label = wezterm.format({
+            { Foreground = { Color = "#6e6a86" } }, -- rose-pine muted
+            { Text = name .. " (current)" },
+          })
+          table.insert(entries, 1, { label = label, id = name })
+        end
+      else
         table.insert(entries, { label = name, id = name })
       end
     end

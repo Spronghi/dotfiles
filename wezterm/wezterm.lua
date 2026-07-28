@@ -6,6 +6,9 @@ local colors = require("configs.theme")
 local wsl_domains = require("configs.wsl_domains")
 local startup = require("configs.startup")
 
+-- claude code sessions status in the tab bar (registers update-status)
+require("claude_status")
+
 -- init the table that will hold the configuration.
 local config = {}
 

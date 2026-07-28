@@ -169,7 +169,7 @@ return function(config)
           fzf_args = "--no-input --info=hidden --bind='j:down,k:up'",
           background = "#1f1d2e", -- rose-pine surface
         },
-        sessionizer.AllActiveWorkspaces {},
+        sessionizer.AllActiveWorkspaces { filter_current = false },
       }),
     },
 
