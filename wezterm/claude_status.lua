@@ -165,10 +165,35 @@ local function navigate(window, pane, id)
   if pane_id then
     local ok, target = pcall(wezterm.mux.get_pane, tonumber(pane_id))
     if ok and target then
+      -- Focus restores clobber early activation twice: when the async
+      -- SwitchToWorkspace lands, and again when the dying modal window
+      -- (it lingers ~200ms) hands OS focus back to the origin window.
+      -- So wait until the origin window is focused on the target
+      -- workspace, THEN focus the claude pane.
       window:perform_action(act.SwitchToWorkspace({ name = workspace }), pane)
-      local tab = target:tab()
-      if tab then tab:activate() end
-      target:activate()
+      local function focus_target(attempts)
+        wezterm.time.call_after(0.05, function()
+          local settled = pcall(function() return window:is_focused() end)
+            and window:is_focused()
+            and wezterm.mux.get_active_workspace() == workspace
+          if not settled then
+            if attempts > 0 then focus_target(attempts - 1) end
+            return
+          end
+          local okp, p = pcall(wezterm.mux.get_pane, tonumber(pane_id))
+          if okp and p then
+            local tab = p:tab()
+            if tab then
+              -- another pane zoomed in this tab would keep covering
+              -- the claude pane even once it holds the focus
+              pcall(function() tab:set_zoomed(false) end)
+              tab:activate()
+            end
+            p:activate()
+          end
+        end)
+      end
+      focus_target(40)
       return
     end
   end

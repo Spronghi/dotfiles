@@ -417,8 +417,8 @@ sessionizer.show_fzf = function(schema)
       local plain = entry.label:gsub("\27%[[%d;:]*m", "")
       if #plain > cols then cols = #plain end
     end
-    cols = math.max(40, math.min(cols + 4, 120))
-    local rows = math.max(3, math.min(#entries + 2, 30))
+    cols = math.max(80, math.min(cols + 8, 140))
+    local rows = math.max(16, math.min(#entries + 4, 34))
 
     -- Pixel estimate of the final window, to center it at spawn.
     -- font_zoom is maintained by the zoom keybindings (keys.lua) so the
@@ -435,9 +435,13 @@ sessionizer.show_fzf = function(schema)
       width = cols,
       height = rows,
       position = {
-        x = math.floor(screen.x + (screen.width - w) / 2),
-        y = math.floor(screen.y + (screen.height - h) / 3),
-        origin = "ScreenCoordinateSystem",
+        -- ScreenCoordinateSystem spawn coords are unreliable on macOS
+        -- (wezterm #3187/#6503): the window lands off-target and the
+        -- corrective set_position below shows as a visible jump.
+        -- ActiveScreen-relative coords are honored at spawn.
+        x = math.floor((screen.width - w) / 2),
+        y = math.floor((screen.height - h) / 3),
+        origin = "ActiveScreen",
       },
     })
 

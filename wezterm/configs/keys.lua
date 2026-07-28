@@ -216,6 +216,14 @@ return function(config)
     },
 
 
+    -- Direct shortcut to the claude sessions picker (also reachable
+    -- with Tab from the Ctrl+E workspaces picker)
+    {
+      key = "i",
+      mods = "CTRL",
+      action = claude_picker,
+    },
+
     -- Show the launcher in fuzzy selection mode to select a workspace
     {
       key = "/",
