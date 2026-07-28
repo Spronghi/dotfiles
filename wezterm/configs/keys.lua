@@ -1,75 +1,11 @@
 -- Pull in the wezterm API
 local wezterm = require("wezterm")
 local sessionizer = require("sessionizer")
+local workspaces = require("workspaces")
 
 local act = wezterm.action
 
 local workspace_root = wezterm.home_dir .. "/workspace"
-
-local function workspace_exists(name)
-  for _, n in ipairs(wezterm.mux.get_workspace_names()) do
-    if n == name then return true end
-  end
-  return false
-end
-
--- Workspace MRU history for the CTRL+] toggle.
---
--- A simple current/previous pair breaks when a workspace dies (closing its
--- last tab destroys it and wezterm silently switches away), so we keep a
--- most-recent-first history instead and toggle to the first entry that is
--- still alive. Stored in wezterm.GLOBAL because module locals are wiped on
--- every config reload; kept as a delimited string because nested tables in
--- wezterm.GLOBAL don't behave like plain Lua tables.
-local SEP = "\x1f"
-
-local function history_list()
-  local hist = {}
-  for name in (wezterm.GLOBAL.workspace_history or ""):gmatch("[^" .. SEP .. "]+") do
-    table.insert(hist, name)
-  end
-  return hist
-end
-
-local function history_save(hist)
-  wezterm.GLOBAL.workspace_history = table.concat(hist, SEP)
-end
-
-wezterm.on("update-status", function(window, _)
-  local active = window:active_workspace()
-  local current = wezterm.GLOBAL.current_workspace
-  if current == active then return end
-  wezterm.GLOBAL.current_workspace = active
-  if current == nil then return end
-
-  -- Push the workspace we came from onto the history front. It may already
-  -- be dead (last tab closed); the toggle prunes dead entries when reading.
-  local hist = { current }
-  for _, name in ipairs(history_list()) do
-    if name ~= current and name ~= active and #hist < 10 then
-      table.insert(hist, name)
-    end
-  end
-  history_save(hist)
-end)
-
-local function switch_to_last_workspace(window, pane)
-  local active = window:active_workspace()
-  local alive, target = {}, nil
-  for _, name in ipairs(history_list()) do
-    if workspace_exists(name) then
-      table.insert(alive, name)
-      if target == nil and name ~= active then target = name end
-    end
-  end
-  history_save(alive)
-
-  if target then
-    window:perform_action(act.SwitchToWorkspace { name = target }, pane)
-  else
-    wezterm.log_info("toggle: no other live workspace in history")
-  end
-end
 
 return function(config)
   config.keys = {}
@@ -224,13 +160,17 @@ return function(config)
 
     --------------- WORKSPACES/SESSIONS ---------------
 
-    -- Show the launcher in selection mode to select a workspace
+    -- Pick among the open workspaces; bare j/k navigate
     {
       key = "e",
       mods = "CTRL",
-      action = act.ShowLauncherArgs {
-        flags = "WORKSPACES",
-      },
+      action = sessionizer.show_fzf({
+        options = {
+          fzf_args = "--no-input --info=hidden --bind='j:down,k:up'",
+          background = "#1f1d2e", -- rose-pine surface
+        },
+        sessionizer.AllActiveWorkspaces {},
+      }),
     },
 
 
@@ -287,7 +227,14 @@ return function(config)
     {
       key = "]",
       mods = "CTRL",
-      action = wezterm.action_callback(switch_to_last_workspace)
+      action = workspaces.toggle_last,
+    },
+
+    -- Close tab without leaving the window stuck on a dead workspace
+    {
+      key = "w",
+      mods = "CMD",
+      action = workspaces.close_tab,
     },
 
     -- Show CPU monitor
@@ -313,8 +260,12 @@ return function(config)
     {
       key = "f",
       mods = "LEADER",
-      action = sessionizer.show({
-        options = { title = "workspaces", prompt = "> " },
+      action = sessionizer.show_fzf({
+        options = {
+          title = "workspaces",
+          prompt = "> ",
+          background = "#1f1d2e", -- rose-pine surface
+        },
         processing = sessionizer.GroupedLabels { root = workspace_root },
         sessionizer.NewWorkspace {},
         sessionizer.FdSearch(workspace_root),

@@ -164,6 +164,22 @@ sessionizer.FdSearch = function(opts)
   end
 end
 
+-- Currently open workspaces. Skips the active one unless
+-- opts.filter_current = false.
+sessionizer.AllActiveWorkspaces = function(opts)
+  opts = opts or {}
+  return function()
+    local current = wezterm.mux.get_active_workspace()
+    local entries = {}
+    for _, name in ipairs(wezterm.mux.get_workspace_names()) do
+      if opts.filter_current == false or name ~= current then
+        table.insert(entries, { label = name, id = name })
+      end
+    end
+    return entries
+  end
+end
+
 --------------- processing ---------------
 
 -- Telescope-style labels ("filename_first"): "name   group" — name in
@@ -278,6 +294,102 @@ sessionizer.show = function(schema)
       }),
       pane
     )
+  end)
+end
+
+--------------- fzf backend ---------------
+
+-- Workspace switching is a GUI-only action, so the fzf window reports
+-- the pick back through an OSC 1337 SetUserVar escape; this handler
+-- receives it (value arrives base64-decoded) and runs the schema
+-- callback against the window the picker was opened from — not the
+-- popup, which is already closing.
+local FZF_VAR = "sessionizer_select"
+local fzf_callback = nil
+local fzf_origin_window_id = nil
+
+wezterm.on("user-var-changed", function(_, _, name, value)
+  if name ~= FZF_VAR or value == "" or not fzf_callback then return end
+
+  local origin = nil
+  for _, w in ipairs(wezterm.gui.gui_windows()) do
+    if w:window_id() == fzf_origin_window_id then
+      origin = w
+      break
+    end
+  end
+  if not origin then
+    wezterm.log_error("sessionizer: origin window is gone")
+    return
+  end
+
+  fzf_callback(origin, origin:active_pane(), value, value)
+end)
+
+-- Same schema as show(), rendered with fzf in a small centered modal
+-- window instead of the InputSelector overlay. Gains vim-style paging
+-- (ctrl-d/ctrl-u) and ctrl-j/k movement; Esc closes the modal. Extra
+-- options: fzf_path, background (modal window background color).
+sessionizer.show_fzf = function(schema)
+  return wezterm.action_callback(function(window, _)
+    local entries = evaluate_schema(schema)
+    local options = complete_schema(schema).options
+    fzf_callback = options.callback
+    fzf_origin_window_id = window:window_id()
+
+    local tmp = "/tmp/wezterm-sessionizer-entries"
+    local f = io.open(tmp, "w")
+    if not f then
+      wezterm.log_error("sessionizer: cannot write " .. tmp)
+      return
+    end
+    for _, entry in ipairs(entries) do
+      f:write(entry.label .. "\t" .. entry.id .. "\n")
+    end
+    f:close()
+
+    local fzf = options.fzf_path or "/opt/homebrew/bin/fzf"
+    local script = table.concat({
+      "selected=$(" .. fzf
+        .. " --ansi --reverse --delimiter='\\t' --with-nth=1"
+        .. " --prompt='" .. (options.prompt or "> ") .. "'"
+        .. " --bind='ctrl-d:half-page-down,ctrl-u:half-page-up'"
+        .. (options.fzf_args and (" " .. options.fzf_args) or "")
+        .. " < " .. tmp .. ")",
+      "rm -f " .. tmp,
+      'if [ -n "$selected" ]; then',
+      "  id=$(printf '%s' \"$selected\" | cut -f2-)",
+      "  printf '\\033]1337;SetUserVar=" .. FZF_VAR .. "=%s\\007' \"$(printf '%s' \"$id\" | base64)\"",
+      "  sleep 0.2", -- let wezterm parse the escape before the pane dies
+      "fi",
+    }, "\n")
+
+    local _, _, mux_window = wezterm.mux.spawn_window({
+      args = { "/bin/sh", "-c", script },
+    })
+
+    local gui = mux_window:gui_window()
+    if gui then
+      local overrides = {
+        enable_tab_bar = false,
+        window_decorations = "RESIZE",
+        exit_behavior = "Close",
+        window_padding = { left = 12, right = 12, top = 8, bottom = 8 },
+        font_size = window:effective_config().font_size * 1.1,
+      }
+      if options.background then
+        overrides.colors = { background = options.background }
+      end
+      gui:set_config_overrides(overrides)
+      local screen = wezterm.gui.screens().active
+      local w = math.floor(screen.width * 0.45)
+      local h = math.floor(screen.height * 0.4)
+      gui:set_inner_size(w, h)
+      gui:set_position(
+        math.floor(screen.x + (screen.width - w) / 2),
+        math.floor(screen.y + (screen.height - h) / 3)
+      )
+    end
   end)
 end
 
