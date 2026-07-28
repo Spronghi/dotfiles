@@ -314,7 +314,9 @@ end
 -- callback against the window the picker was opened from — not the
 -- popup, which is already closing.
 local FZF_VAR = "sessionizer_select"
+local SWITCH_SENTINEL = "__switch__"
 local fzf_callback = nil
+local fzf_on_tab = nil
 local fzf_origin_window_id = nil
 
 wezterm.on("user-var-changed", function(_, _, name, value)
@@ -332,18 +334,27 @@ wezterm.on("user-var-changed", function(_, _, name, value)
     return
   end
 
+  -- Tab pressed in the modal: open the alternate picker instead.
+  if value == SWITCH_SENTINEL then
+    if fzf_on_tab then fzf_on_tab(origin, origin:active_pane()) end
+    return
+  end
+
   fzf_callback(origin, origin:active_pane(), value, value)
 end)
 
 -- Same schema as show(), rendered with fzf in a small centered modal
 -- window instead of the InputSelector overlay. Gains vim-style paging
 -- (ctrl-d/ctrl-u) and ctrl-j/k movement; Esc closes the modal. Extra
--- options: fzf_path, background (modal window background color).
+-- options: fzf_path, background (modal window background color),
+-- on_tab (function(window, pane) run when Tab is pressed in the modal
+-- — used to toggle to an alternate picker; the modal closes first).
 sessionizer.show_fzf = function(schema)
   return wezterm.action_callback(function(window, _)
     local entries = evaluate_schema(schema)
     local options = complete_schema(schema).options
     fzf_callback = options.callback
+    fzf_on_tab = options.on_tab
     fzf_origin_window_id = window:window_id()
 
     local tmp = "/tmp/wezterm-sessionizer-entries"
@@ -358,23 +369,76 @@ sessionizer.show_fzf = function(schema)
     f:close()
 
     local fzf = options.fzf_path or "/opt/homebrew/bin/fzf"
-    local script = table.concat({
-      "selected=$(" .. fzf
-        .. " --ansi --reverse --delimiter='\\t' --with-nth=1"
-        .. " --prompt='" .. (options.prompt or "> ") .. "'"
-        .. " --bind='ctrl-d:half-page-down,ctrl-u:half-page-up'"
-        .. (options.fzf_args and (" " .. options.fzf_args) or "")
-        .. " < " .. tmp .. ")",
-      "rm -f " .. tmp,
-      'if [ -n "$selected" ]; then',
-      "  id=$(printf '%s' \"$selected\" | cut -f2-)",
-      "  printf '\\033]1337;SetUserVar=" .. FZF_VAR .. "=%s\\007' \"$(printf '%s' \"$id\" | base64)\"",
-      "  sleep 0.2", -- let wezterm parse the escape before the pane dies
-      "fi",
-    }, "\n")
+    local send_var = "printf '\\033]1337;SetUserVar=" .. FZF_VAR .. "=%s\\007'"
+    local fzf_cmd = fzf
+      .. " --ansi --reverse --delimiter='\\t' --with-nth=1"
+      .. " --prompt='" .. (options.prompt or "> ") .. "'"
+      .. " --bind='ctrl-d:half-page-down,ctrl-u:half-page-up'"
+      .. (options.on_tab and " --expect=tab" or "")
+      .. (options.fzf_args and (" " .. options.fzf_args) or "")
+      .. " < " .. tmp
+
+    local script
+    if options.on_tab then
+      -- --expect makes fzf print the pressed key on line 1 and the
+      -- selection on line 2; Tab reports back a switch sentinel.
+      script = table.concat({
+        "out=$(" .. fzf_cmd .. ")",
+        "rm -f " .. tmp,
+        "key=$(printf '%s\\n' \"$out\" | head -n1)",
+        "selected=$(printf '%s\\n' \"$out\" | sed -n 2p)",
+        'if [ "$key" = "tab" ]; then',
+        "  " .. send_var .. " \"$(printf '%s' '" .. SWITCH_SENTINEL .. "' | base64)\"",
+        "  sleep 0.2", -- let wezterm parse the escape before the pane dies
+        'elif [ -n "$selected" ]; then',
+        "  id=$(printf '%s' \"$selected\" | cut -f2-)",
+        "  " .. send_var .. " \"$(printf '%s' \"$id\" | base64)\"",
+        "  sleep 0.2",
+        "fi",
+      }, "\n")
+    else
+      script = table.concat({
+        "selected=$(" .. fzf_cmd .. ")",
+        "rm -f " .. tmp,
+        'if [ -n "$selected" ]; then',
+        "  id=$(printf '%s' \"$selected\" | cut -f2-)",
+        "  " .. send_var .. " \"$(printf '%s' \"$id\" | base64)\"",
+        "  sleep 0.2", -- let wezterm parse the escape before the pane dies
+        "fi",
+      }, "\n")
+    end
+
+    -- Size to the content: rows from the entry count, cols from the
+    -- longest label (ANSI escapes stripped; multibyte glyphs count
+    -- extra, which only errs on the wide side). Passed at spawn time —
+    -- resizing/moving the window after it appears is what flickers.
+    local cols = 0
+    for _, entry in ipairs(entries) do
+      local plain = entry.label:gsub("\27%[[%d;:]*m", "")
+      if #plain > cols then cols = #plain end
+    end
+    cols = math.max(40, math.min(cols + 4, 120))
+    local rows = math.max(3, math.min(#entries + 2, 30))
+
+    -- Pixel estimate of the final window, to center it at spawn.
+    -- font_zoom is maintained by the zoom keybindings (keys.lua) so the
+    -- modal follows the terminal's zoom level.
+    local zoom = 1.1 ^ (wezterm.GLOBAL.font_zoom or 0)
+    local font = window:effective_config().font_size * zoom
+    local cell_w, cell_h = font * 0.62, font * 1.55
+    local screen = wezterm.gui.screens().active
+    local w = math.floor(cols * cell_w) + 24
+    local h = math.floor(rows * cell_h) + 16
 
     local _, _, mux_window = wezterm.mux.spawn_window({
       args = { "/bin/sh", "-c", script },
+      width = cols,
+      height = rows,
+      position = {
+        x = math.floor(screen.x + (screen.width - w) / 2),
+        y = math.floor(screen.y + (screen.height - h) / 3),
+        origin = "ScreenCoordinateSystem",
+      },
     })
 
     local gui = mux_window:gui_window()
@@ -384,16 +448,13 @@ sessionizer.show_fzf = function(schema)
         window_decorations = "RESIZE",
         exit_behavior = "Close",
         window_padding = { left = 12, right = 12, top = 8, bottom = 8 },
-        font_size = window:effective_config().font_size * 1.1,
+        font_size = font,
       }
       if options.background then
         overrides.colors = { background = options.background }
       end
       gui:set_config_overrides(overrides)
-      local screen = wezterm.gui.screens().active
-      local w = math.floor(screen.width * 0.45)
-      local h = math.floor(screen.height * 0.4)
-      gui:set_inner_size(w, h)
+      -- spawn-time position is not reliably honored; correct it here
       gui:set_position(
         math.floor(screen.x + (screen.width - w) / 2),
         math.floor(screen.y + (screen.height - h) / 3)

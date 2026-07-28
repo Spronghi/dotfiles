@@ -2,10 +2,49 @@
 local wezterm = require("wezterm")
 local sessionizer = require("sessionizer")
 local workspaces = require("workspaces")
+local claude_status = require("claude_status")
 
 local act = wezterm.action
 
 local workspace_root = wezterm.home_dir .. "/workspace"
+
+-- Font zoom with bookkeeping: wezterm's zoom is per-window runtime
+-- state lua can't read, so wrap the zoom keys and count the steps in
+-- wezterm.GLOBAL. The sessionizer modal reads it to match the zoom
+-- (one step = 10%, wezterm's own increment).
+local function zoom(delta)
+  return wezterm.action_callback(function(window, pane)
+    if delta == 0 then
+      wezterm.GLOBAL.font_zoom = 0
+      window:perform_action(act.ResetFontSize, pane)
+    else
+      wezterm.GLOBAL.font_zoom = (wezterm.GLOBAL.font_zoom or 0) + delta
+      window:perform_action(
+        delta > 0 and act.IncreaseFontSize or act.DecreaseFontSize,
+        pane
+      )
+    end
+  end)
+end
+
+-- Ctrl+E pickers: workspaces ⇄ claude sessions, Tab toggles between
+-- them. Mutual references via upvalue, hence the forward declaration.
+local workspace_picker
+local claude_picker = claude_status.pick({
+  on_tab = function(window, pane)
+    window:perform_action(workspace_picker, pane)
+  end,
+})
+workspace_picker = sessionizer.show_fzf({
+  options = {
+    fzf_args = "--no-input --info=hidden --bind='j:down,k:up'",
+    background = "black",
+    on_tab = function(window, pane)
+      window:perform_action(claude_picker, pane)
+    end,
+  },
+  sessionizer.AllActiveWorkspaces { filter_current = false },
+})
 
 return function(config)
   config.keys = {}
@@ -158,19 +197,22 @@ return function(config)
     -- Enable debug
     { key = 'd', mods = 'LEADER', action = wezterm.action.ShowDebugOverlay },
 
+    -- Font zoom (tracked, see zoom() above)
+    { key = "=", mods = "SUPER", action = zoom(1) },
+    { key = "-", mods = "SUPER", action = zoom(-1) },
+    { key = "0", mods = "SUPER", action = zoom(0) },
+    { key = "=", mods = "CTRL", action = zoom(1) },
+    { key = "-", mods = "CTRL", action = zoom(-1) },
+    { key = "0", mods = "CTRL", action = zoom(0) },
+
     --------------- WORKSPACES/SESSIONS ---------------
 
-    -- Pick among the open workspaces; bare j/k navigate
+    -- Pick among the open workspaces; bare j/k navigate. Tab toggles
+    -- between this and the claude sessions picker.
     {
       key = "e",
       mods = "CTRL",
-      action = sessionizer.show_fzf({
-        options = {
-          fzf_args = "--no-input --info=hidden --bind='j:down,k:up'",
-          background = "#1f1d2e", -- rose-pine surface
-        },
-        sessionizer.AllActiveWorkspaces { filter_current = false },
-      }),
+      action = workspace_picker,
     },
 
 
@@ -264,7 +306,7 @@ return function(config)
         options = {
           title = "workspaces",
           prompt = "> ",
-          background = "#1f1d2e", -- rose-pine surface
+          background = "black",
         },
         processing = sessionizer.GroupedLabels { root = workspace_root },
         sessionizer.NewWorkspace {},

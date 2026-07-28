@@ -1,11 +1,22 @@
--- Renders open Claude Code sessions in the right status of the tab bar:
--- one entry per workspace, worst status wins. State files are written
--- by claude/claude-status-hook.sh as "<workspace>\t<status>\t<ts>".
+-- Claude Code session tracking for wezterm:
+--   * renders open sessions in the right status of the tab bar
+--     (one entry per workspace, worst status wins);
+--   * M.pick — fzf modal listing sessions; picking one jumps to the
+--     pane running claude (bind it to a key).
+--
+-- State files are written by claude/claude-status-hook.sh as
+-- "<workspace>\t<status>\t<ts>". A presence scan over mux panes covers
+-- sessions the hooks can't see (started before the hooks existed);
+-- those render as idle.
 --
 -- "completed" acts as an unread marker: it flips to "idle" (rewriting
 -- the state file) once the user switches to that workspace.
 
 local wezterm = require("wezterm")
+local sessionizer = require("sessionizer")
+local act = wezterm.action
+
+local M = {}
 
 local DIR = "/tmp/claude-wezterm-status"
 local STALE_SECONDS = 12 * 60 * 60
@@ -17,7 +28,8 @@ local STATUSES = {
   idle      = { severity = 1, icon = "○", color = "#6e6a86" }, -- rose-pine muted
 }
 
-local function read_sessions(active_workspace)
+-- Per-workspace status from the hook state files, worst status wins.
+local function read_statuses(active_workspace)
   local ok, files = pcall(wezterm.read_dir, DIR)
   if not ok then return {} end
 
@@ -56,54 +68,170 @@ local function read_sessions(active_workspace)
   return by_workspace
 end
 
--- Workspaces with a live claude process in the foreground of some pane.
--- Covers sessions the hooks can't see (started before the hooks were
--- configured); without a state file they render as idle.
-local function claude_workspaces()
+-- Panes with a live claude process in the foreground, per workspace.
+local function claude_panes()
   local found = {}
   for _, mux_window in ipairs(wezterm.mux.all_windows()) do
     local workspace = mux_window:get_workspace()
-    if not found[workspace] then
-      for _, tab in ipairs(mux_window:tabs()) do
-        for _, pane in ipairs(tab:panes()) do
-          local ok, info = pcall(pane.get_foreground_process_info, pane)
-          if ok and info then
-            local name = (info.name or ""):match("[^/]+$")
-            local arg0 = ((info.argv or {})[1] or ""):match("[^/]+$")
-            if name == "claude" or arg0 == "claude" then
-              found[workspace] = true
-              break
-            end
+    for _, tab in ipairs(mux_window:tabs()) do
+      for _, pane in ipairs(tab:panes()) do
+        local ok, info = pcall(pane.get_foreground_process_info, pane)
+        if ok and info then
+          local name = (info.name or ""):match("[^/]+$")
+          local arg0 = ((info.argv or {})[1] or ""):match("[^/]+$")
+          if name == "claude" or arg0 == "claude" then
+            found[workspace] = found[workspace] or {}
+            table.insert(found[workspace], pane)
           end
         end
-        if found[workspace] then break end
       end
     end
   end
   return found
 end
 
-wezterm.on("update-status", function(window, _)
-  local sessions = read_sessions(window:active_workspace())
+-- All known claude sessions: { workspace, status, pane_id? }.
+-- pane_id is nil when a state file exists but no claude pane is
+-- visible (navigation falls back to a workspace switch).
+M.sessions = function(active_workspace)
+  local statuses = read_statuses(active_workspace)
+  local panes = claude_panes()
+  local list, covered = {}, {}
 
-  for workspace in pairs(claude_workspaces()) do
-    if not sessions[workspace] then
-      sessions[workspace] = "idle"
+  for workspace, plist in pairs(panes) do
+    covered[workspace] = true
+    for _, pane in ipairs(plist) do
+      -- claude sets the pane title to the task summary, prefixed with
+      -- a spinner glyph; keep the text from the first word onwards
+      local title = (pane:get_title() or ""):match("[%w].*$") or ""
+      table.insert(list, {
+        workspace = workspace,
+        pane_id = pane:pane_id(),
+        status = statuses[workspace] or "idle",
+        title = title,
+      })
+    end
+  end
+
+  for workspace, status in pairs(statuses) do
+    if not covered[workspace] then
+      table.insert(list, { workspace = workspace, status = status })
+    end
+  end
+
+  return list
+end
+
+--------------- tab bar ---------------
+
+wezterm.on("update-status", function(window, _)
+  local by_workspace = {}
+  for _, s in ipairs(M.sessions(window:active_workspace())) do
+    local current = by_workspace[s.workspace]
+    if not current or STATUSES[s.status].severity > STATUSES[current].severity then
+      by_workspace[s.workspace] = s.status
     end
   end
 
   local names = {}
-  for workspace in pairs(sessions) do
+  for workspace in pairs(by_workspace) do
     table.insert(names, workspace)
   end
   table.sort(names)
 
   local segments = {}
   for _, workspace in ipairs(names) do
-    local s = STATUSES[sessions[workspace]]
+    local s = STATUSES[by_workspace[workspace]]
     table.insert(segments, { Foreground = { Color = s.color } })
     table.insert(segments, { Text = workspace .. " " .. s.icon .. "  " })
   end
 
   window:set_right_status(wezterm.format(segments))
 end)
+
+--------------- picker ---------------
+
+-- Selecting an entry jumps to the claude pane; if the pane died between
+-- render and pick (or was never visible) fall back to the workspace.
+local function navigate(window, pane, id)
+  if not id then return end
+
+  local pane_id, workspace = id:match("^pane:(%d+):(.+)$")
+  if not pane_id then
+    workspace = id:match("^ws:(.+)$")
+  end
+  if not workspace then return end
+
+  if pane_id then
+    local ok, target = pcall(wezterm.mux.get_pane, tonumber(pane_id))
+    if ok and target then
+      window:perform_action(act.SwitchToWorkspace({ name = workspace }), pane)
+      local tab = target:tab()
+      if tab then tab:activate() end
+      target:activate()
+      return
+    end
+  end
+
+  window:perform_action(act.SwitchToWorkspace({ name = workspace }), pane)
+end
+
+-- Action for a keybinding: fzf modal over M.sessions(), urgency first.
+-- opts.on_tab (function(window, pane)) toggles to an alternate picker
+-- when Tab is pressed in the modal.
+M.pick = function(opts)
+  opts = opts or {}
+  return wezterm.action_callback(function(window, pane)
+  local sessions = M.sessions(window:active_workspace())
+  if #sessions == 0 then
+    window:toast_notification("claude", "no claude sessions open", nil, 3000)
+    return
+  end
+
+  table.sort(sessions, function(a, b)
+    local sa, sb = STATUSES[a.status].severity, STATUSES[b.status].severity
+    if sa ~= sb then return sa > sb end
+    return a.workspace < b.workspace
+  end)
+
+  local schema = {
+    options = {
+      prompt = "claude > ",
+      fzf_args = "--no-input --info=hidden --bind='j:down,k:up'",
+      background = "black",
+      callback = navigate,
+      on_tab = opts.on_tab,
+    },
+  }
+  local max_workspace = 0
+  for _, s in ipairs(sessions) do
+    if #s.workspace > max_workspace then max_workspace = #s.workspace end
+  end
+
+  for _, s in ipairs(sessions) do
+    local meta = STATUSES[s.status]
+    local segments = {
+      { Foreground = { Color = meta.color } },
+      {
+        Text = s.workspace
+          .. string.rep(" ", max_workspace - #s.workspace)
+          .. "  " .. meta.icon .. " " .. s.status
+          .. string.rep(" ", #"completed" - #s.status),
+      },
+    }
+    if s.title and s.title ~= "" then
+      table.insert(segments, { Foreground = { Color = "#908caa" } }) -- rose-pine subtle
+      table.insert(segments, { Text = "  " .. s.title })
+    end
+    table.insert(schema, {
+      label = wezterm.format(segments),
+      id = s.pane_id and ("pane:" .. s.pane_id .. ":" .. s.workspace)
+        or ("ws:" .. s.workspace),
+    })
+  end
+
+  window:perform_action(sessionizer.show_fzf(schema), pane)
+  end)
+end
+
+return M
