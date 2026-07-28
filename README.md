@@ -14,6 +14,8 @@ Keep the ball rolling
 - [ripgrep](https://github.com/BurntSushi/ripgrep)
 - [aerospace](https://github.com/nikitabobko/AeroSpace)
 - [atuin](https://atuin.sh/)
+- [terminal-notifier](https://github.com/julienXX/terminal-notifier) — native notifications for claude sessions (`brew install terminal-notifier`)
+- [fd](https://github.com/sharkdp/fd) — repo discovery for the wezterm sessionizer
 
 ## Create symlinks
 

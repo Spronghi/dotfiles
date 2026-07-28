@@ -41,4 +41,38 @@ fi
 
 mkdir -p "$DIR"
 printf '%s\t%s\t%s\n' "$WORKSPACE" "$STATUS" "$(date +%s)" > "$DIR/$SESSION_ID"
+
+# Native notification for statuses that need attention, but only when
+# wezterm is in the background. Text goes through argv, not string
+# interpolation, so arbitrary hook messages can't break the osascript.
+if [ "$STATUS" = "completed" ] || [ "$STATUS" = "blocked" ]; then
+  FRONT=$(lsappinfo info -only name "$(lsappinfo front)" 2>/dev/null)
+  case "$FRONT" in
+    *WezTerm*) exit 0 ;;
+  esac
+
+  if [ "$STATUS" = "completed" ]; then
+    TITLE="✓ $WORKSPACE"
+    BODY="task completed"
+  else
+    TITLE="◆ $WORKSPACE"
+    BODY=$(printf '%s' "$INPUT" | "$JQ" -r '.message // "waiting for you"' 2>/dev/null)
+  fi
+
+  # terminal-notifier allows a custom image; osascript is the fallback
+  # (with its stock Script Editor icon).
+  NOTIFIER="/opt/homebrew/bin/terminal-notifier"
+  ICON="$(dirname "$0")/assets/claude.png"
+  if [ -x "$NOTIFIER" ]; then
+    "$NOTIFIER" -title "$TITLE" -message "$BODY" \
+      -contentImage "$ICON" -group "claude-$SESSION_ID" >/dev/null 2>&1
+  else
+    osascript - "$TITLE" "$BODY" >/dev/null 2>&1 <<'EOF'
+on run argv
+  display notification (item 2 of argv) with title (item 1 of argv)
+end run
+EOF
+  fi
+fi
+
 exit 0
