@@ -153,8 +153,16 @@ end
 --------------- tab bar ---------------
 
 wezterm.on("update-status", function(window, _)
+  -- "Seen" (clears the unread ✓ and its notification) requires the
+  -- window to be OS-focused: with wezterm in the background the active
+  -- workspace is still whatever was left open, and flipping there
+  -- would kill the notification an instant after the hook posts it.
+  local seen_workspace = nil
+  local ok, focused = pcall(function() return window:is_focused() end)
+  if ok and focused then seen_workspace = window:active_workspace() end
+
   local by_workspace = {}
-  for _, s in ipairs(M.sessions(window:active_workspace())) do
+  for _, s in ipairs(M.sessions(seen_workspace)) do
     local current = by_workspace[s.workspace]
     if not current or STATUSES[s.status].severity > STATUSES[current].severity then
       by_workspace[s.workspace] = s.status
