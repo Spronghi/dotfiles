@@ -453,6 +453,8 @@ sessionizer.show_fzf = function(schema)
         exit_behavior = "Close",
         window_padding = { left = 12, right = 12, top = 8, bottom = 8 },
         font_size = font,
+        window_background_opacity = 1.0,
+        text_background_opacity = 1.0,
       }
       if options.background then
         overrides.colors = { background = options.background }
