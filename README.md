@@ -6,16 +6,27 @@ Personal configs for a macOS (and occasionally WSL) dev setup built around **Wez
 
 ## What's inside
 
-| Path | What it configures |
-|------|-------------------|
-| `wezterm/` | WezTerm: keys, theme, workspaces, sessionizer, Claude Code status bar |
-| `nvim/` | Neovim (lazy.nvim, lsp-zero, telescope, which-key, …) |
-| `.zshrc` | zsh + oh-my-zsh, starship, zoxide, fzf, atuin, nvm, bun |
-| `.aerospace.toml` | AeroSpace tiling window manager |
-| `atuin/` | Atuin shell history |
-| `starship.toml` | Starship prompt |
-| `claude/` | Claude Code hook that feeds session status to WezTerm |
-| `.wslconfig` | WSL memory/CPU limits (Windows only) |
+| Path              | What it configures                                                    |
+| ----------------- | --------------------------------------------------------------------- |
+| `wezterm/`        | WezTerm: keys, theme, workspaces, sessionizer, Claude Code status bar |
+| `nvim/`           | Neovim (lazy.nvim, lsp-zero, telescope, which-key, …)                 |
+| `.zshrc`          | zsh + oh-my-zsh, starship, zoxide, fzf, atuin, nvm, bun               |
+| `.aerospace.toml` | AeroSpace tiling window manager                                       |
+| `atuin/`          | Atuin shell history                                                   |
+| `starship.toml`   | Starship prompt                                                       |
+| `claude/`         | Claude Code hook that feeds session status to WezTerm                 |
+| `.wslconfig`      | WSL memory/CPU limits (Windows only)                                  |
+
+## Workflow
+
+Every project lives in its own WezTerm workspace. A typical session:
+
+1. `Leader f` — sessionizer: fuzzy-find the project under `~/workspace` and jump into it as a workspace (created on the fly if not open yet).
+2. In the first tab, split the layout: nvim in the top pane, a terminal in the bottom pane (`Leader s`).
+3. Open a new tab (`Alt+t`) and start Claude Code there. It works in the background while the editing continues in tab 1.
+4. The bottom-right status bar shows every Claude session across all workspaces (● running, ◆ blocked, ✓ completed) — glance at it to monitor progress without switching context.
+5. `Ctrl+e` — see which workspaces are open and hop between projects (`Tab` inside the picker flips to the Claude sessions view).
+6. When Claude finishes a task or blocks on a permission, the status flips (and a native notification fires if WezTerm is in the background). `Ctrl+i` opens the Claude sessions picker — pick the session to jump straight to its pane and follow up.
 
 ## Tools
 
@@ -75,48 +86,48 @@ Leader key is <kbd>Ctrl</kbd>+<kbd>Space</kbd> (4s timeout).
 
 ### Panes
 
-| Shortcut | Action |
-|----------|--------|
-| `Leader v` | Split right (50%) |
-| `Leader s` / `Leader S` | Split down / up (50%) |
-| `Leader a` | Small split right (20%) |
-| `Leader h/j/k/l` | Move between panes |
-| `Leader z` | Toggle pane zoom |
-| `Leader w` / `Alt+w` | Close pane (with confirm) |
-| `Leader q` | Rotate panes |
-| `Ctrl+p` | Pane select mode |
+| Shortcut                | Action                    |
+| ----------------------- | ------------------------- |
+| `Leader v`              | Split right (50%)         |
+| `Leader s` / `Leader S` | Split down / up (50%)     |
+| `Leader a`              | Small split right (20%)   |
+| `Leader h/j/k/l`        | Move between panes        |
+| `Leader z`              | Toggle pane zoom          |
+| `Leader w` / `Alt+w`    | Close pane (with confirm) |
+| `Leader q`              | Rotate panes              |
+| `Ctrl+p`                | Pane select mode          |
 
 ### Tabs
 
-| Shortcut | Action |
-|----------|--------|
-| `Alt+t` | New tab |
-| `Alt+1..8` | Jump to tab |
-| `Leader r` | Rename tab |
-| `Cmd+w` | Close tab (workspace-aware, no dead-workspace limbo) |
-| `Ctrl+x` | Copy mode |
+| Shortcut   | Action                                               |
+| ---------- | ---------------------------------------------------- |
+| `Alt+t`    | New tab                                              |
+| `Alt+1..8` | Jump to tab                                          |
+| `Leader r` | Rename tab                                           |
+| `Cmd+w`    | Close tab (workspace-aware, no dead-workspace limbo) |
+| `Ctrl+x`   | Copy mode                                            |
 
 ### Workspaces & sessionizer
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+e` | Pick among **open** workspaces (fzf, `j`/`k` to move) |
-| `Tab` (inside picker) | Toggle between workspaces ⇄ Claude sessions picker |
-| `Ctrl+i` | Claude sessions picker directly |
-| `Leader f` | Sessionizer: fuzzy-find any repo under `~/workspace` (fd) and open/switch to it as a workspace |
-| `Leader t` | Create named workspace |
-| `Ctrl+]` | Toggle last active workspace |
-| `Ctrl+/` | Built-in fuzzy workspace launcher |
-| `Leader e` | Full launcher |
+| Shortcut              | Action                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| `Ctrl+e`              | Pick among **open** workspaces (fzf, `j`/`k` to move)                                          |
+| `Tab` (inside picker) | Toggle between workspaces ⇄ Claude sessions picker                                             |
+| `Ctrl+i`              | Claude sessions picker directly                                                                |
+| `Leader f`            | Sessionizer: fuzzy-find any repo under `~/workspace` (fd) and open/switch to it as a workspace |
+| `Leader t`            | Create named workspace                                                                         |
+| `Ctrl+]`              | Toggle last active workspace                                                                   |
+| `Ctrl+/`              | Built-in fuzzy workspace launcher                                                              |
+| `Leader e`            | Full launcher                                                                                  |
 
 ### Misc
 
-| Shortcut | Action |
-|----------|--------|
+| Shortcut                   | Action                                                         |
+| -------------------------- | -------------------------------------------------------------- |
 | `Ctrl/Cmd + =` / `-` / `0` | Font zoom in / out / reset (tracked so pickers match the zoom) |
-| `Leader n` | Toggle fullscreen |
-| `Leader u` | CPU monitor workspace (`top`) |
-| `Leader d` | Debug overlay |
+| `Leader n`                 | Toggle fullscreen                                              |
+| `Leader u`                 | CPU monitor workspace (`top`)                                  |
+| `Leader d`                 | Debug overlay                                                  |
 
 ## Claude Code integration
 
@@ -129,17 +140,17 @@ Leader key is <kbd>Ctrl</kbd>+<kbd>Space</kbd> (4s timeout).
 
 ## AeroSpace shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Alt+h/j/k/l` | Focus window left/down/up/right |
-| `Alt+Shift+h/j/k/l` | Move window |
-| `Alt+1..9`, `Alt+a..z` | Switch workspace |
-| `Alt+Shift+1..9/a..z` | Move window to workspace |
-| `Alt+Tab` | Back-and-forth between last two workspaces |
-| `Alt+Shift+Tab` | Move workspace to next monitor |
-| `Alt+/` / `Alt+,` | Tiles / accordion layout |
-| `Alt+Shift+-` / `Alt+Shift+=` | Resize window |
-| `Alt+Shift+;` | Service mode (`Esc` reload config, `r` reset layout, `f` toggle floating, `Backspace` close all but current) |
+| Shortcut                      | Action                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Alt+h/j/k/l`                 | Focus window left/down/up/right                                                                              |
+| `Alt+Shift+h/j/k/l`           | Move window                                                                                                  |
+| `Alt+1..9`, `Alt+a..z`        | Switch workspace                                                                                             |
+| `Alt+Shift+1..9/a..z`         | Move window to workspace                                                                                     |
+| `Alt+Tab`                     | Back-and-forth between last two workspaces                                                                   |
+| `Alt+Shift+Tab`               | Move workspace to next monitor                                                                               |
+| `Alt+/` / `Alt+,`             | Tiles / accordion layout                                                                                     |
+| `Alt+Shift+-` / `Alt+Shift+=` | Resize window                                                                                                |
+| `Alt+Shift+;`                 | Service mode (`Esc` reload config, `r` reset layout, `f` toggle floating, `Backspace` close all but current) |
 
 ## Neovim
 
@@ -149,26 +160,26 @@ Highlights: lsp-zero (+ mason, cmp, conform format-on-save with prettier/eslint)
 
 ### Key mappings
 
-| Mapping | Action |
-|---------|--------|
-| `Ctrl+h/j/k/l` | Move between splits |
-| `<leader>pf` / `<leader>ps` | Find file / live grep (telescope) |
-| `<leader>pg` | Grep for input string |
-| `<leader>pG` | Git files |
-| `<leader>bf` | Find buffers |
-| `<leader>po` / `<leader>pw` | Document / workspace symbols |
-| `<leader>px` | Diagnostics |
-| `<leader>pr` | Resume last search |
-| `gd` / `gD` / `gr` / `gi` | Definition / declaration / references / implementations |
-| `K` | Hover info |
-| `ca` / `rn` | Code action / rename |
-| `<leader>gg` / `<leader>gb` / `<leader>ga` | Git / Git blame / Git add . (fugitive) |
-| `<leader>xx` | Toggle diagnostics list (trouble) |
-| `<leader>u` | Undotree |
-| `<leader>sf` | Scratch buffer |
-| `<leader>ss` (visual) | Screenshot selection to clipboard (silicon) |
-| `<leader>cc` / `<leader>ca` | CodeCompanion chat / actions |
-| `<leader>md` | Markdown preview |
+| Mapping                                    | Action                                                  |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `Ctrl+h/j/k/l`                             | Move between splits                                     |
+| `<leader>pf` / `<leader>ps`                | Find file / live grep (telescope)                       |
+| `<leader>pg`                               | Grep for input string                                   |
+| `<leader>pG`                               | Git files                                               |
+| `<leader>bf`                               | Find buffers                                            |
+| `<leader>po` / `<leader>pw`                | Document / workspace symbols                            |
+| `<leader>px`                               | Diagnostics                                             |
+| `<leader>pr`                               | Resume last search                                      |
+| `gd` / `gD` / `gr` / `gi`                  | Definition / declaration / references / implementations |
+| `K`                                        | Hover info                                              |
+| `ca` / `rn`                                | Code action / rename                                    |
+| `<leader>gg` / `<leader>gb` / `<leader>ga` | Git / Git blame / Git add . (fugitive)                  |
+| `<leader>xx`                               | Toggle diagnostics list (trouble)                       |
+| `<leader>u`                                | Undotree                                                |
+| `<leader>sf`                               | Scratch buffer                                          |
+| `<leader>ss` (visual)                      | Screenshot selection to clipboard (silicon)             |
+| `<leader>cc` / `<leader>ca`                | CodeCompanion chat / actions                            |
+| `<leader>md`                               | Markdown preview                                        |
 
 ## Shell
 
