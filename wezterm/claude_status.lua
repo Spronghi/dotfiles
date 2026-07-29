@@ -28,20 +28,36 @@ local STATUSES = {
   idle      = { severity = 1, icon = "○", color = "#6e6a86" }, -- rose-pine muted
 }
 
--- Per-workspace status from the hook state files, worst status wins.
+-- Statuses from the hook state files:
+--   pane      — per-pane status (files that record a pane id);
+--   workspace — per-workspace aggregate, worst status wins;
+--   legacy    — per-workspace aggregate of files WITHOUT a pane id
+--               (written by an older hook), used as a pane fallback.
 local function read_statuses(active_workspace)
+  local empty = { pane = {}, workspace = {}, legacy = {} }
   local ok, files = pcall(wezterm.read_dir, DIR)
-  if not ok then return {} end
+  if not ok then return empty end
 
   local now = os.time()
-  local by_workspace = {}
+  local result = empty
+
+  local function keep_worst(map, key, status)
+    local current = map[key]
+    if not current or STATUSES[status].severity > STATUSES[current].severity then
+      map[key] = status
+    end
+  end
 
   for _, path in ipairs(files) do
     local f = io.open(path, "r")
     if f then
       local line = f:read("l") or ""
       f:close()
-      local workspace, status, ts = line:match("^([^\t]+)\t([^\t]+)\t(%d+)$")
+      local workspace, status, ts, pane =
+        line:match("^([^\t]+)\t([^\t]+)\t(%d+)\t(%d+)$")
+      if not workspace then
+        workspace, status, ts = line:match("^([^\t]+)\t([^\t]+)\t(%d+)$")
+      end
       ts = tonumber(ts)
 
       if not (workspace and STATUSES[status] and ts) or now - ts > STALE_SECONDS then
@@ -52,20 +68,23 @@ local function read_statuses(active_workspace)
           status = "idle"
           local w = io.open(path, "w")
           if w then
-            w:write(workspace .. "\t" .. status .. "\t" .. ts .. "\n")
+            w:write(workspace .. "\t" .. status .. "\t" .. ts
+              .. (pane and ("\t" .. pane) or "") .. "\n")
             w:close()
           end
         end
 
-        local current = by_workspace[workspace]
-        if not current or STATUSES[status].severity > STATUSES[current].severity then
-          by_workspace[workspace] = status
+        if pane then
+          result.pane[tonumber(pane)] = status
+        else
+          keep_worst(result.legacy, workspace, status)
         end
+        keep_worst(result.workspace, workspace, status)
       end
     end
   end
 
-  return by_workspace
+  return result
 end
 
 -- Panes with a live claude process in the foreground, per workspace.
@@ -104,16 +123,19 @@ M.sessions = function(active_workspace)
       -- claude sets the pane title to the task summary, prefixed with
       -- a spinner glyph; keep the text from the first word onwards
       local title = (pane:get_title() or ""):match("[%w].*$") or ""
+      local pane_id = pane:pane_id()
       table.insert(list, {
         workspace = workspace,
-        pane_id = pane:pane_id(),
-        status = statuses[workspace] or "idle",
+        pane_id = pane_id,
+        -- per-pane when the hook recorded the pane; legacy files
+        -- (no pane id) fall back to their workspace aggregate
+        status = statuses.pane[pane_id] or statuses.legacy[workspace] or "idle",
         title = title,
       })
     end
   end
 
-  for workspace, status in pairs(statuses) do
+  for workspace, status in pairs(statuses.workspace) do
     if not covered[workspace] then
       table.insert(list, { workspace = workspace, status = status })
     end

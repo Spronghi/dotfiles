@@ -40,7 +40,9 @@ fi
 [ -n "$WORKSPACE" ] || exit 0
 
 mkdir -p "$DIR"
-printf '%s\t%s\t%s\n' "$WORKSPACE" "$STATUS" "$(date +%s)" > "$DIR/$SESSION_ID"
+# WEZTERM_PANE is guaranteed non-empty here (workspace lookup needs it);
+# it lets wezterm show per-session status instead of per-workspace.
+printf '%s\t%s\t%s\t%s\n' "$WORKSPACE" "$STATUS" "$(date +%s)" "$WEZTERM_PANE" > "$DIR/$SESSION_ID"
 
 # Native notification for statuses that need attention, but only when
 # wezterm is in the background. Text goes through argv, not string
@@ -66,6 +68,9 @@ if [ "$STATUS" = "completed" ] || [ "$STATUS" = "blocked" ]; then
   if [ -x "$NOTIFIER" ]; then
     "$NOTIFIER" -title "$TITLE" -message "$BODY" \
       -contentImage "$ICON" -group "claude-$SESSION_ID" >/dev/null 2>&1
+    # Auto-dismiss: drop the notification from Notification Center after
+    # 20s so it doesn't pile up. Detached so the hook returns immediately.
+    (sleep 20; "$NOTIFIER" -remove "claude-$SESSION_ID") >/dev/null 2>&1 </dev/null &
   else
     osascript - "$TITLE" "$BODY" >/dev/null 2>&1 <<'EOF'
 on run argv
