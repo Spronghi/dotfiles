@@ -24,8 +24,12 @@ if [ "$STATUS" = "blocked" ]; then
   esac
 fi
 
+NOTIFIER="/opt/homebrew/bin/terminal-notifier"
+
 if [ "$STATUS" = "end" ]; then
   rm -f "$DIR/$SESSION_ID"
+  # session gone → its notification is stale
+  [ -x "$NOTIFIER" ] && "$NOTIFIER" -remove "claude-$SESSION_ID" >/dev/null 2>&1
   exit 0
 fi
 
@@ -63,14 +67,10 @@ if [ "$STATUS" = "completed" ] || [ "$STATUS" = "blocked" ]; then
 
   # terminal-notifier allows a custom image; osascript is the fallback
   # (with its stock Script Editor icon).
-  NOTIFIER="/opt/homebrew/bin/terminal-notifier"
   ICON="$(dirname "$0")/assets/claude.png"
   if [ -x "$NOTIFIER" ]; then
     "$NOTIFIER" -title "$TITLE" -message "$BODY" \
       -contentImage "$ICON" -group "claude-$SESSION_ID" >/dev/null 2>&1
-    # Auto-dismiss: drop the notification from Notification Center after
-    # 20s so it doesn't pile up. Detached so the hook returns immediately.
-    (sleep 20; "$NOTIFIER" -remove "claude-$SESSION_ID") >/dev/null 2>&1 </dev/null &
   else
     osascript - "$TITLE" "$BODY" >/dev/null 2>&1 <<'EOF'
 on run argv

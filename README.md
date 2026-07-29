@@ -136,7 +136,7 @@ Leader key is <kbd>Ctrl</kbd>+<kbd>Space</kbd> (4s timeout).
 - shows every session in the tab bar right status — one entry per workspace, worst status wins (◆ blocked > ● running > ✓ completed > ○ idle);
 - treats `completed` as an unread marker: it flips to idle once you visit that workspace;
 - provides the `Ctrl+i` picker — select a session to jump straight to the pane running Claude;
-- fires a native macOS notification (terminal-notifier, osascript fallback) when a session completes or blocks **while WezTerm is in the background** — auto-dismissed from Notification Center after 20s.
+- fires a native macOS notification (terminal-notifier, osascript fallback) when a session completes or blocks **while WezTerm is in the background** — dismissed from Notification Center the moment you visit that workspace (same acknowledgment that clears the green ✓), or when the session ends.
 
 ## AeroSpace shortcuts
 

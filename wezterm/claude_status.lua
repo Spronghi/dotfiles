@@ -63,7 +63,9 @@ local function read_statuses(active_workspace)
       if not (workspace and STATUSES[status] and ts) or now - ts > STALE_SECONDS then
         os.remove(path)
       else
-        -- Seen: the user is looking at this workspace, clear the unread mark.
+        -- Seen: the user is looking at this workspace, clear the unread
+        -- mark and the matching macOS notification (state file name is
+        -- the claude session id, same id the hook used for -group).
         if status == "completed" and workspace == active_workspace then
           status = "idle"
           local w = io.open(path, "w")
@@ -72,6 +74,10 @@ local function read_statuses(active_workspace)
               .. (pane and ("\t" .. pane) or "") .. "\n")
             w:close()
           end
+          pcall(wezterm.background_child_process, {
+            "/opt/homebrew/bin/terminal-notifier",
+            "-remove", "claude-" .. path:match("[^/]+$"),
+          })
         end
 
         if pane then
