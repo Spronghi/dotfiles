@@ -10,7 +10,7 @@
 -- those render as idle.
 --
 -- "completed" acts as an unread marker: it flips to "idle" (rewriting
--- the state file) once the user switches to that workspace.
+-- the state file) once the user switches to the tab its pane lives in.
 
 local wezterm = require("wezterm")
 local sessionizer = require("sessionizer")
@@ -27,6 +27,25 @@ local STATUSES = {
   completed = { severity = 2, icon = "✓", color = "#a6e3a1" }, -- green: done, all good
   idle      = { severity = 1, icon = "○", color = "#6e6a86" }, -- rose-pine muted
 }
+
+-- Whether the tab holding this pane is its window's active tab. A
+-- workspace-level check alone would mark sessions "seen" the moment
+-- the window gains focus, even when claude finished in a background
+-- tab the user never looked at. Legacy files without a pane id, and
+-- panes that died before the state file was cleaned up, fall back to
+-- true (workspace match is then the only signal we have).
+local function tab_is_active(pane_id)
+  if not pane_id then return true end
+  local ok, pane = pcall(wezterm.mux.get_pane, tonumber(pane_id))
+  if not ok or not pane then return true end
+  local tab = pane:tab()
+  if not tab then return true end
+  local win = tab:window()
+  if not win then return true end
+  local okt, active = pcall(function() return win:active_tab() end)
+  if not okt or not active then return true end
+  return active:tab_id() == tab:tab_id()
+end
 
 -- Statuses from the hook state files:
 --   pane      — per-pane status (files that record a pane id);
@@ -63,10 +82,12 @@ local function read_statuses(active_workspace)
       if not (workspace and STATUSES[status] and ts) or now - ts > STALE_SECONDS then
         os.remove(path)
       else
-        -- Seen: the user is looking at this workspace, clear the unread
-        -- mark and the matching macOS notification (state file name is
-        -- the claude session id, same id the hook used for -group).
-        if status == "completed" and workspace == active_workspace then
+        -- Seen: the user is looking at this workspace AND the tab the
+        -- claude pane lives in; clear the unread mark and the matching
+        -- macOS notification (state file name is the claude session id,
+        -- same id the hook used for -group).
+        if status == "completed" and workspace == active_workspace
+            and tab_is_active(pane) then
           status = "idle"
           local w = io.open(path, "w")
           if w then
