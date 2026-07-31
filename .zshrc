@@ -114,6 +114,7 @@ source ~/.nvm/nvm.sh
 export PATH=/opt/homebrew/bin:$PATH
 export PATH=/usr/local/bin:$PATH
 export PATH="$PATH:$HOME/go/bin"
+export PATH="$PATH:/Applications/WezTerm.app/Contents/MacOS"
 
 HISTFILE=~/.zsh_history
 HISTSIZE=10000

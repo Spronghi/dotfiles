@@ -219,8 +219,8 @@ return function(config)
     -- Direct shortcut to the claude sessions picker (also reachable
     -- with Tab from the Ctrl+E workspaces picker)
     {
-      key = "i",
-      mods = "CTRL",
+      key = "e",
+      mods = "SUPER",
       action = claude_picker,
     },
 

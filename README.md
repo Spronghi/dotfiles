@@ -26,7 +26,7 @@ Every project lives in its own WezTerm workspace. A typical session:
 3. Open a new tab (`Alt+t`) and start Claude Code there. It works in the background while the editing continues in tab 1.
 4. The bottom-right status bar shows every Claude session across all workspaces (● running, ◆ blocked, ✓ completed) — glance at it to monitor progress without switching context.
 5. `Ctrl+e` — see which workspaces are open and hop between projects (`Tab` inside the picker flips to the Claude sessions view).
-6. When Claude finishes a task or blocks on a permission, the status flips (and a native notification fires if WezTerm is in the background). `Ctrl+i` opens the Claude sessions picker — pick the session to jump straight to its pane and follow up.
+6. When Claude finishes a task or blocks on a permission, the status flips (and a native notification fires if WezTerm is in the background). `Cmd+e` opens the Claude sessions picker — pick the session to jump straight to its pane and follow up.
 
 ## Tools
 
@@ -113,7 +113,7 @@ Leader key is <kbd>Ctrl</kbd>+<kbd>Space</kbd> (4s timeout).
 | --------------------- | ---------------------------------------------------------------------------------------------- |
 | `Ctrl+e`              | Pick among **open** workspaces (fzf, `j`/`k` to move)                                          |
 | `Tab` (inside picker) | Toggle between workspaces ⇄ Claude sessions picker                                             |
-| `Ctrl+i`              | Claude sessions picker directly                                                                |
+| `Cmd+e`              | Claude sessions picker directly                                                                |
 | `Leader f`            | Sessionizer: fuzzy-find any repo under `~/workspace` (fd) and open/switch to it as a workspace |
 | `Leader t`            | Create named workspace                                                                         |
 | `Ctrl+]`              | Toggle last active workspace                                                                   |
@@ -135,7 +135,7 @@ Leader key is <kbd>Ctrl</kbd>+<kbd>Space</kbd> (4s timeout).
 
 - shows every session in the tab bar right status — one entry per workspace, worst status wins (◆ blocked > ● running > ✓ completed > ○ idle);
 - treats `completed` as an unread marker: it flips to idle once you visit that workspace;
-- provides the `Ctrl+i` picker — select a session to jump straight to the pane running Claude;
+- provides the `Cmd+e` picker — select a session to jump straight to the pane running Claude;
 - fires a native macOS notification (terminal-notifier, osascript fallback) when a session completes or blocks **while WezTerm is in the background** — dismissed from Notification Center the moment you visit that workspace (same acknowledgment that clears the green ✓), or when the session ends.
 
 ## AeroSpace shortcuts
