@@ -35,7 +35,7 @@ local claude_picker = claude_status.pick({
     window:perform_action(workspace_picker, pane)
   end,
 })
-workspace_picker = sessionizer.show_fzf({
+workspace_picker = sessionizer.show({
   options = {
     fzf_args = "--no-input --info=hidden --bind='j:down,k:up'",
     background = "black",
@@ -310,11 +310,12 @@ return function(config)
     {
       key = "f",
       mods = "LEADER",
-      action = sessionizer.show_fzf({
+      action = sessionizer.show({
         options = {
           title = "workspaces",
           prompt = "> ",
           background = "black",
+          always_fuzzy = true,
         },
         processing = sessionizer.GroupedLabels { root = workspace_root },
         sessionizer.NewWorkspace {},

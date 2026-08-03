@@ -312,7 +312,7 @@ M.pick = function(opts)
     })
   end
 
-  window:perform_action(sessionizer.show_fzf(schema), pane)
+  window:perform_action(sessionizer.show(schema), pane)
   end)
 end
 

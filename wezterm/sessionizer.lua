@@ -78,7 +78,7 @@ local function complete_schema(schema)
   local defaults = {
     options = {
       title = "workspaces",
-      always_fuzzy = true,
+      always_fuzzy = false,
       callback = sessionizer.DefaultCallback,
     },
     processing = {},
