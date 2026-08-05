@@ -21,12 +21,24 @@ local M = {}
 local DIR = "/tmp/claude-wezterm-status"
 local STALE_SECONDS = 12 * 60 * 60
 
+-- show_name: whether the right status spells out the workspace. Live
+-- sessions do; idle ones are bare icons, so parked workspaces can't
+-- crowd out the ones actually doing something. Full names always live
+-- in the picker.
 local STATUSES = {
-  blocked   = { severity = 4, icon = "◆", color = "#eb6f92" }, -- rose-pine love
-  running   = { severity = 3, icon = "●", color = "#f6c177" }, -- rose-pine gold
-  completed = { severity = 2, icon = "✓", color = "#a6e3a1" }, -- green: done, all good
-  idle      = { severity = 1, icon = "○", color = "#6e6a86" }, -- rose-pine muted
+  blocked   = { severity = 4, icon = "◆", color = "#eb6f92", show_name = true  }, -- rose-pine love
+  running   = { severity = 3, icon = "●", color = "#f6c177", show_name = true  }, -- rose-pine gold
+  completed = { severity = 2, icon = "✓", color = "#a6e3a1", show_name = true  }, -- green: done, all good
+  idle      = { severity = 1, icon = "○", color = "#6e6a86", show_name = false }, -- rose-pine muted
 }
+
+-- Workspace names are directory names and run long
+-- ("accessiway-agentic-accessibility-engine"); cap them in the tab bar.
+local NAME_MAX = 14
+local function trunc(name)
+  if #name <= NAME_MAX then return name end
+  return name:sub(1, NAME_MAX - 1) .. "…"
+end
 
 -- Whether the tab holding this pane is its window's active tab. A
 -- workspace-level check alone would mark sessions "seen" the moment
@@ -190,17 +202,28 @@ wezterm.on("update-status", function(window, _)
     end
   end
 
-  local names = {}
-  for workspace in pairs(by_workspace) do
-    table.insert(names, workspace)
+  local entries = {}
+  for workspace, status in pairs(by_workspace) do
+    table.insert(entries, { workspace = workspace, status = status })
   end
-  table.sort(names)
+
+  -- Named entries left, bare icons right: interleaving them alphabetically
+  -- scatters the readable ones across the bar.
+  table.sort(entries, function(a, b)
+    local sa, sb = STATUSES[a.status], STATUSES[b.status]
+    if sa.show_name ~= sb.show_name then return sa.show_name end
+    if sa.severity ~= sb.severity then return sa.severity > sb.severity end
+    return a.workspace < b.workspace
+  end)
 
   local segments = {}
-  for _, workspace in ipairs(names) do
-    local s = STATUSES[by_workspace[workspace]]
+  for _, entry in ipairs(entries) do
+    local s = STATUSES[entry.status]
+    local text = s.show_name
+      and (trunc(entry.workspace) .. " " .. s.icon)
+      or s.icon
     table.insert(segments, { Foreground = { Color = s.color } })
-    table.insert(segments, { Text = workspace .. " " .. s.icon .. "  " })
+    table.insert(segments, { Text = text .. "  " })
   end
 
   window:set_right_status(wezterm.format(segments))
